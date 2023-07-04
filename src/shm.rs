@@ -72,6 +72,10 @@ impl Shm {
     /// Opens shared memory at `name`.
     pub fn open(name: &str, oflags: OpenOptions, mode: OpenMode) -> io::Result<Self> {
         let cstr = CString::new(name).unwrap();
+        #[cfg(target_os = "macos")]
+        let r =
+            unsafe { libc::shm_open(cstr.as_ptr(), oflags.bits(), mode.bits() as libc::c_uint) };
+        #[cfg(target_os = "linux")]
         let r = unsafe { libc::shm_open(cstr.as_ptr(), oflags.bits(), mode.bits()) };
         if r < 0 {
             return Err(io::Error::last_os_error());
