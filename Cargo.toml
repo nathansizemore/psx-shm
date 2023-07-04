@@ -2,6 +2,13 @@
 name = "psx-shm"
 version = "0.1.0"
 edition = "2021"
+authors = ["Nathan Sizemore <nathanrsizemore@gmail.com>"]
+description = "POSIX shared memory wrapper."
+readme = "README.md"
+keywords = ["posix", "shared", "memory", "ipc", "shm"]
+license = "MPL-2.0"
+repository = "https://github.com/nathansizemore/psx-shm"
+documentation = "https://docs.rs/psx-shm/"
 
 [dependencies]
 bitflags = "2.0"
