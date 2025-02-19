@@ -18,6 +18,9 @@ bitflags! {
         const READ = libc::O_RDONLY;
         /// Open for write.
         const WRITE = libc::O_WRONLY;
+        /// Open for read+write. Note that this is not the same value as `OpenOptions::READ |
+        /// OpenOptions::Write`.
+        const READWRITE = libc::O_RDWR;
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
