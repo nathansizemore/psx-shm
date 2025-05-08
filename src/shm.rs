@@ -121,11 +121,7 @@ impl Shm {
 
     /// Try to create a [`memmap2::MmapMut`] by which we can read and write to this shared memory
     /// object.
-    pub fn map(
-        &self,
-        offset: u64,
-        len: Option<NonZeroUsize>
-    ) -> io::Result<MmapMut> {
+    pub fn map(&self, offset: u64, len: Option<NonZeroUsize>) -> io::Result<MmapMut> {
         let mut opts = MmapOptions::new();
         opts.offset(offset);
         if let Some(len) = len {
@@ -141,7 +137,7 @@ impl Shm {
     pub fn unlink(self) -> io::Result<()> {
         match unsafe { libc::shm_unlink(self.name.as_ptr()) } {
             0 => Ok(()),
-            _ => Err(io::Error::last_os_error())
+            _ => Err(io::Error::last_os_error()),
         }
     }
 }
