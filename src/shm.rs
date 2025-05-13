@@ -5,9 +5,10 @@
 // distributed with this file, You can obtain one at
 // http://mozilla.org/MPL/2.0/.
 
-use std::{ffi::CString, io, mem, os::fd::RawFd};
+use std::{ffi::CString, io, mem, num::NonZeroUsize, os::fd::RawFd};
 
 use bitflags::bitflags;
+use memmap2::{MmapMut, MmapOptions};
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -69,6 +70,9 @@ bitflags! {
 #[derive(Debug)]
 pub struct Shm {
     fd: RawFd,
+    // this `name` MUST always be valid utf8 - we just keep it as a CString cause that's what we
+    // need to interact with the libc apis
+    name: CString,
 }
 
 impl Shm {
@@ -79,12 +83,12 @@ impl Shm {
         let r =
             unsafe { libc::shm_open(cstr.as_ptr(), oflags.bits(), mode.bits() as libc::c_uint) };
         #[cfg(target_os = "linux")]
-        let r = unsafe { libc::shm_open(cstr.as_ptr(), oflags.bits(), mode.bits()) };
-        if r < 0 {
+        let fd = unsafe { libc::shm_open(cstr.as_ptr(), oflags.bits(), mode.bits()) };
+        if fd < 0 {
             return Err(io::Error::last_os_error());
         }
 
-        return Ok(Self { fd: r });
+        Ok(Self { fd, name: cstr })
     }
 
     /// Returns the size of the shared memory reported by `fstat`.
@@ -108,40 +112,33 @@ impl Shm {
         Err(io::Error::last_os_error())
     }
 
-    /// Creates a new mapping in the calling process address space.
-    pub fn map(
-        &self,
-        addr: *mut libc::c_void,
-        len: usize,
-        prot: Protection,
-        flags: Mapping,
-        offset: usize,
-    ) -> io::Result<*mut libc::c_void> {
-        let r = unsafe {
-            libc::mmap(
-                addr,
-                len,
-                prot.bits(),
-                flags.bits(),
-                self.fd,
-                offset as libc::off_t,
-            )
-        };
-        if r == libc::MAP_FAILED {
-            return Err(io::Error::last_os_error());
-        }
-
-        Ok(r)
+    pub fn name(&self) -> &str {
+        let bytes = self.name.as_bytes();
+        // SAFETY: We guarantee that `name` is always valid utf8. It is created from a `&str` and
+        // never mutated.
+        unsafe { std::str::from_utf8_unchecked(bytes) }
     }
 
-    /// Unmap a mapping in the calling process address space.
-    pub fn unmap(&self, addr: *mut libc::c_void, len: usize) -> io::Result<()> {
-        let r = unsafe { libc::munmap(addr, len) };
-        if r != 0 {
-            return Err(io::Error::last_os_error());
+    /// Try to create a [`memmap2::MmapMut`] by which we can read and write to this shared memory
+    /// object.
+    pub fn map(&self, offset: u64, len: Option<NonZeroUsize>) -> io::Result<MmapMut> {
+        let mut opts = MmapOptions::new();
+        opts.offset(offset);
+        if let Some(len) = len {
+            opts.len(len.get());
         }
 
-        Ok(())
+        // SAFETY: This is sound because the potential unsoundness comes from having a file open
+        // that is written to/read from at the same time as another process. Since we're using a
+        // file descriptor that is unique to this process, that's not an issue here.
+        unsafe { opts.map_mut(self.fd) }
+    }
+
+    pub fn unlink(self) -> io::Result<()> {
+        match unsafe { libc::shm_unlink(self.name.as_ptr()) } {
+            0 => Ok(()),
+            _ => Err(io::Error::last_os_error()),
+        }
     }
 }
 
